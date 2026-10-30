@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Carvalho BJJ",
-  description:
-    "Campeonato de Jiu-Jitsu com inscrição, informações oficiais e comunicação preparada para cada edição.",
+  title: "Gestão esportiva",
+  description: "Gestão de turmas, mensalidades, ranking e campeonatos para arenas e escolas esportivas.",
 };
 
 export default function RootLayout({

@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Event Manager
 
-## Getting Started
+Aplicação Next.js (App Router) para gestão de eventos esportivos: inscrições, chaveamento, cronômetro e painel financeiro.
 
-First, run the development server:
+## Desenvolvimento
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Variáveis de ambiente
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Crie um `.env.local` com as variáveis abaixo (veja `.env.example`). Nunca versione valores reais.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Pendências de configuração
 
-## Learn More
+- Banco de dados (Supabase ou outro) ainda não configurado.
+- Regras de valor de inscrição e fluxo pós-inscrição ainda não definidos.
+- Pagamentos não implementados.
 
-To learn more about Next.js, take a look at the following resources:
+## Fase 1 (Foundation) — multi-tenant
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Passo a passo completo, com todo o SQL para o SQL Editor, em [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
+- Migrations em `supabase/migrations`. Aplicar no projeto Supabase **novo** (`supabase db push` ou SQL Editor).
+- Teste de isolamento entre tenants (Postgres embutido, não precisa de banco nem de credenciais): `npm run test:db`.
+- Primeiro Super Admin: crie um usuário em Authentication e rode no SQL Editor `insert into platform_admins (user_id) values ('<uuid>');`.
+- Rotas: `/entrar` (login), `/minhas-arenas`, `/t/[slug]` (arena), `/platform` (Super Admin).
+- Toda nova tabela de tenant deve: ter `tenant_id`, habilitar RLS, e conceder privilégios explícitos (o Supabase concede `all` por padrão a `authenticated`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Fase 5 (Campeonatos)
 
-## Deploy on Vercel
+- Módulo de campeonatos reescrito sobre o modelo multi-tenant (`/t/[slug]/campeonatos`): categorias configuráveis, inscrições, chaves de eliminação, resultados, despesas e envio opcional de pontos ao ranking.
+- O código do sistema antigo (login por senha, tabelas `participantes`/`chaveamentos`/`custos`, inscrição pública por CPF, chave pública, pontuação por equipes) foi removido. Fica disponível no histórico do Git.
+- Testes: `npm test` (motor de chaves + isolamento e regras do banco).
+- Ainda **não** existem: inscrição pública de atletas, página pública de chaves e exportação em PDF.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Fase 6 (Personalização)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/t/[slug]/configuracoes` (permissão `tenant.manage`): nome, contatos, cor principal e logo. O logo vai para o bucket `tenant-assets` (público para leitura, 1 MB, PNG/JPG/WebP), numa pasta com o id do tenant; as policies de escrita exigem `tenant.manage` nessa pasta.
+- `tenants.settings` só aceita chaves conhecidas (`phone`, `whatsapp`, `instagram`, `website`, `address`, `primary_color`), validadas no banco.
+- `/t/[slug]/usuarios`: lista, adiciona (por e-mail de conta já existente) e desativa/reativa usuários. Só o owner gerencia usuários; o banco impede ficar sem owner ativo.
+- A migration cria o bucket via `storage.buckets`; aplique no projeto Supabase novo junto com as demais.
+
+## Fase 7 (Planos e assinatura)
+
+- Assinatura por tenant: plano, status (`trial`, `active`, `past_due`, `cancelled`) e validade. `past_due` mantém acesso (carência); `cancelled` e trial vencido desligam os módulos (leitura e escrita nas tabelas de módulo passam a ser negadas pelo RLS via `module_enabled`).
+- O Super Admin altera plano, status, validade e overrides de módulo em `/platform` (RPCs `set_tenant_subscription` e `set_tenant_module`, validadas no banco). Não há cobrança: uma integração futura de pagamento só precisa chamar `set_tenant_subscription`.
+- `/t/[slug]/plano`: plano, situação, módulos incluídos e uso x limite (`plan_usage`). Aviso no topo quando a assinatura está em atraso, vencida ou cancelada.
+- Limites hoje: alunos e turmas (`plan_limits`); chave ausente = ilimitado.
+
+## Modo demo (sem Supabase)
+
+```bash
+npm run dev:demo
+```
+
+Abre em `http://localhost:3000` com um Postgres embutido (PGlite) que roda as migrations reais, com RLS ativo e dados de exemplo (duas arenas, alunos, turmas, mensalidades, ranking e um campeonato). Em `/entrar` aparecem as contas de teste; qualquer senha funciona.
+
+- Nada sai da máquina e nada é persistido: reiniciar o servidor recria os dados.
+- O cliente Supabase é substituído por um tradutor próprio (`app/_lib/demo`), ativado só com `DEMO_MODE=1`. Ele não substitui o teste contra um Supabase real (PostgREST, Auth e Storage de verdade).
